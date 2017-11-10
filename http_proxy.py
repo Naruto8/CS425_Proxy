@@ -35,7 +35,7 @@ class HTTP_Proxy:
     def proxy_thread(self, conn, client_addr):
         request = conn.recv(MAX_DATA)
         srequest = request.decode('utf-8')
-        self.check_version(srequest)
+        self.check_version(srequest, conn)
         first_line = srequest.split(' ')[0]
         url = srequest.split(' ')[1]
 
@@ -43,7 +43,7 @@ class HTTP_Proxy:
             print(first_line)
             print("URL: " + url)
 
-        self.check_method(first_line)
+        self.check_method(first_line, conn)
 
         http_pos = url.find("://")
         if (http_pos == -1):
@@ -86,33 +86,45 @@ class HTTP_Proxy:
             s.close()
             conn.close()
         except (socket.error, value, message):
-            if s:
-                s.close()
-            if conn:
-                conn.close()
+            self.close(s=s, conn=conn)
             print("Runtime Error: " + message)
             sys.exit(1)
 
-    def check_version(self, request):
-        version = request.split(' ')[2].split('/')[1]
+    def check_version(self, request, conn):
+        version = request.split(' ')[2].split('/')[1].split('\n')[0].strip()
         if version == '1.1' or version == '1.0':
             pass
         else:
             print("ERROR 505: HTTP Version Not Supported")
+            data = b"ERROR 505: HTTP Version Not Supported\n"
+            conn.send(data)
+            self.close(conn=conn)
             sys.exit(1)
 
-    def check_method(self, method):
+    def check_method(self, method, conn):
         if method == 'GET' or method == 'POST' or method == 'HEAD':
             pass
         else:
             print("ERROR 501: Not Implemented")
+            data = b"ERROR 501: Not Implemented\n"
+            conn.send(data)
+            self.close(conn=conn)
             sys.exit(1)
 
     def filter(self):
         return
 
-    def exit(self):
-        return
+    def close(self, s=None, conn=None):
+        self.close_server(s)
+        self.close_client(conn)
+
+    def close_server(self, s):
+        if s:
+            s.close()
+
+    def close_client(self, conn):
+        if conn:
+            conn.close()
 
 def main():
 
