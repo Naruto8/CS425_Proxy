@@ -8,74 +8,105 @@ BACKLOG = 50
 MAX_DATA = 8192
 DEBUG = True
 
-def proxy_thread(conn, client_addr):
-    request = conn.recv(MAX_DATA)
-    srequest = request.decode('utf-8')
-    print(srequest)
-    first_line = srequest.split(' ')[0]
-    url = srequest.split(' ')[1]
-
-    if (DEBUG):
-        print(first_line)
-        print("URL: " + url)
-
-    http_pos = url.find("://")
-    if (http_pos == -1):
-        temp = url
-    else:
-        temp = url[(http_pos+3):]
-
-    port_pos = temp.find(":")
-
-    webserver_pos = temp.find("/")
-    if webserver_pos == -1:
-        webserver_pos = len(temp)
-
-    webserver = ""
-    port = -1
-    if (port_pos == -1 or webserver_pos < port_pos):
-        port = 80
-        webserver = temp[:webserver_pos]
-    else:
-        port = int((temp[(port_pos+1):])[:webserver_pos-port_pos-1])
-        webserver = temp[:port_pos]
-
-    print("Connect to " + webserver + ':' + str(port))
-
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((webserver, port))
-        s.send(request)
-        print("Client's Request sent")
-
-        while 1:
-            data = s.recv(MAX_DATA)
-
-            if (len(data) > 0):
-                conn.send(data)
-            else:
-                break
-
-        print("Client's Request processed")
-        s.close()
-        conn.close()
-    except (socket.error, value, message):
-        if s:
-            s.close()
-        if conn:
-            conn.close()
-        print("Runtime Error: " + message)
-        sys.exit(1)
-
 class HTTP_Proxy:
-    def __init__(self):
-        return
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
 
     def start(self):
-        return
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind((self.host, self.port))
+            s.listen(BACKLOG)
+        except (socket.error, value, message):
+            if s:
+                s.close()
+            print("Couldn't open socket: " + message)
+            sys.exit(1)
 
-    def proxy_thread(self):
-        return
+        while 1:
+            conn, client_addr = s.accept()
+            print("Client Request! Accepted! New Thread .....")
+            thread.start_new_thread(self.proxy_thread, (conn, client_addr))
+
+        s.close()
+        
+
+    def proxy_thread(self, conn, client_addr):
+        request = conn.recv(MAX_DATA)
+        srequest = request.decode('utf-8')
+        self.check_version(srequest)
+        first_line = srequest.split(' ')[0]
+        url = srequest.split(' ')[1]
+
+        if (DEBUG):
+            print(first_line)
+            print("URL: " + url)
+
+        self.check_method(first_line)
+
+        http_pos = url.find("://")
+        if (http_pos == -1):
+            temp = url
+        else:
+            temp = url[(http_pos+3):]
+
+        port_pos = temp.find(":")
+
+        webserver_pos = temp.find("/")
+        if webserver_pos == -1:
+            webserver_pos = len(temp)
+
+        webserver = ""
+        port = -1
+        if (port_pos == -1 or webserver_pos < port_pos):
+            port = 80
+            webserver = temp[:webserver_pos]
+        else:
+            port = int((temp[(port_pos+1):])[:webserver_pos-port_pos-1])
+            webserver = temp[:port_pos]
+
+        print("Connect to " + webserver + ':' + str(port))
+
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((webserver, port))
+            s.send(request)
+            print("Client's Request sent")
+
+            while 1:
+                data = s.recv(MAX_DATA)
+
+                if (len(data) > 0):
+                    conn.send(data)
+                else:
+                    break
+
+            print("Client's Request processed")
+            s.close()
+            conn.close()
+        except (socket.error, value, message):
+            if s:
+                s.close()
+            if conn:
+                conn.close()
+            print("Runtime Error: " + message)
+            sys.exit(1)
+
+    def check_version(self, request):
+        version = request.split(' ')[2].split('/')[1]
+        if version == '1.1' or version == '1.0':
+            pass
+        else:
+            print("ERROR 505: HTTP Version Not Supported")
+            sys.exit(1)
+
+    def check_method(self, method):
+        if method == 'GET' or method == 'POST' or method == 'HEAD':
+            pass
+        else:
+            print("ERROR 501: Not Implemented")
+            sys.exit(1)
 
     def filter(self):
         return
@@ -85,29 +116,19 @@ class HTTP_Proxy:
 
 def main():
 
-    if (len(sys.argv) < 2):
-        print("Usage: python3 http_proxy.py <hostname> <port>")
-        return sys.stdout
+    parser = argparse.ArgumentParser(
+            description='Simple HTTP Proxy for CS425 Project',)
+    parser.add_argument("-ip", "--hostname", default="127.0.0.1",
+                    help="default IP 127.0.0.1")
+    parser.add_argument("-p", "--port", default="8000",
+                    help="default port number 8000")
+    args = parser.parse_args()
 
-    host = ''
-    port = int(sys.argv[1])
+    host = args.hostname
+    port = int(args.port)
 
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind((host, port))
-        s.listen(BACKLOG)
-    except (socket.error, value, message):
-        if s:
-            s.close()
-        print("Couldn't open socket: " + message)
-        sys.exit(1)
-
-    while 1:
-        conn, client_addr = s.accept()
-        print("Client Request! Accepted! New Thread .....")
-        thread.start_new_thread(proxy_thread, (conn, client_addr))
-
-    s.close()
+    proxy = HTTP_Proxy(host, port)
+    proxy.start()
 
 if __name__ == '__main__':
     try:
