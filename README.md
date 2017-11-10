@@ -1,9 +1,5 @@
 # CS425_Proxy
-<<<<<<< HEAD
 A Mini-Project for the course CS425 IIT Kanpur
-=======
-A Mini-Project for the course CS425
->>>>>>> 6012c82eff9d366ee4ffa1a37abcf5aae9a8b515
 
 ### Usage:
   - `python3 http_proxy.py <hostname> <port>`
