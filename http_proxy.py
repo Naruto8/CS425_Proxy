@@ -116,17 +116,22 @@ class HTTP_Proxy:
 
     def check_allowed(self,url,conn):
     	fo = open("blocked.txt","r")
-    	test=url.split("/")[2].strip()
+    	test=url.split("/")[2].split(".")
     	#print(test)
     	while True:
-    		line = fo.readline().strip()
-    		#print(line)
-    		if line==test:
-	            print("url is blocked\n")
-	            data = b"url IS BLOCKED!!\n"
-	            conn.send(data)
-	            self.close(conn=conn)
-	            sys.exit(1)
+    		line = fo.readline()
+    		if line:    			
+    			linetest=line.split(".")[1].strip()
+    			#print(linetest)
+    		for part in test:
+    			#print(part)
+    			part1=part.strip()
+	    		if linetest==part1:
+		            print("url is blocked\n")
+		            data = b"url IS BLOCKED!!\n"
+		            conn.send(data)
+		            self.close(conn=conn)
+		            sys.exit(1)
     		if not line: 
         		break
 
