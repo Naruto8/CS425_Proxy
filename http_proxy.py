@@ -42,7 +42,9 @@ class HTTP_Proxy:
         if (DEBUG):
             print(first_line)
             print("URL: " + url)
+        
 
+        self.check_allowed(url,conn)
         self.check_method(first_line, conn)
 
         http_pos = url.find("://")
@@ -92,6 +94,7 @@ class HTTP_Proxy:
 
     def check_version(self, request, conn):
         version = request.split(' ')[2].split('/')[1].split('\n')[0].strip()
+        #print(request)
         if version == '1.1' or version == '1.0':
             pass
         else:
@@ -110,6 +113,24 @@ class HTTP_Proxy:
             conn.send(data)
             self.close(conn=conn)
             sys.exit(1)
+
+    def check_allowed(self,url,conn):
+    	fo = open("blocked.txt","r")
+    	test=url.split("/")[2].strip()
+    	#print(test)
+    	while True:
+    		line = fo.readline().strip()
+    		#print(line)
+    		if line==test:
+	            print("url is blocked\n")
+	            data = b"url IS BLOCKED!!\n"
+	            conn.send(data)
+	            self.close(conn=conn)
+	            sys.exit(1)
+    		if not line: 
+        		break
+
+
 
     def filter(self):
         return
