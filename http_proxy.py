@@ -6,13 +6,14 @@ import argparse
 
 BACKLOG = 50
 MAX_DATA = 8192
-DEBUG = True
+DEBUG = False
 CWD = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = CWD +"/cache/"
 LOG_FILE = CWD +"/log.txt"
+BLOCKED_LIST = CWD + "/blocked.txt"
 
 class HTTP_Proxy:
-    def __init__(self, host, port):
+    def __init__(self, host=None, port=None):
         self.host = host
         self.port = port
 
@@ -33,7 +34,6 @@ class HTTP_Proxy:
             thread.start_new_thread(self.proxy_thread, (conn, client_addr))
 
         s.close()
-        
 
     def proxy_thread(self, conn, client_addr):
         request = conn.recv(MAX_DATA)
@@ -123,7 +123,7 @@ class HTTP_Proxy:
             sys.exit(1)
 
     def check_allowed(self,url,conn):
-    	fo = open("blocked.txt","r")
+    	fo = open(BLOCKED_LIST, 'r')
     	test=url.split("/")[2].split(".")
     	while True:
     		line = fo.readline()
@@ -153,8 +153,27 @@ class HTTP_Proxy:
             found = False
         return found
 
-    def filter(self):
-        return
+    def filter(self, action, handle):
+        if action == 'block':
+            for line in open(BLOCKED_LIST, 'r'):
+                for address in handle:
+                    if address == line.strip():
+                        print("Already blocked")
+                        handle.remove(address)
+            for address in handle:
+                with open(BLOCKED_LIST, 'a') as f:
+                    f.write(address+'\n')
+
+        elif action == 'unblock':
+            print("Unblocking")
+            f = open(BLOCKED_LIST, 'r')
+            lines = f.readlines()
+            f.close()
+            f = open(BLOCKED_LIST, 'w')
+            for line in lines:
+                if line.strip() not in handle:
+                    f.write(line.strip() + '\n')
+            f.close()
 
     def close(self, s=None, conn=None):
         self.close_server(s)
@@ -176,13 +195,26 @@ def main():
                     help="default IP 127.0.0.1")
     parser.add_argument("-p", "--port", default="8000",
                     help="default port number 8000")
+    parser.add_argument("-b", "--block", metavar="HOST", nargs='*',
+                    default=None, help="Block address, default no action")
+    parser.add_argument("-ub", "--unblock", metavar="HOST", nargs='*',
+                    default=None, help="Block address, default no action")
     args = parser.parse_args()
 
     host = args.hostname
     port = int(args.port)
+    block_list = args.block
+    unblock_list = args.unblock
 
-    proxy = HTTP_Proxy(host, port)
-    proxy.start()
+    if block_list:
+        proxy = HTTP_Proxy()
+        proxy.filter(action='block', handle=block_list)
+    elif unblock_list:
+        proxy = HTTP_Proxy()
+        proxy.filter(action='unblock', handle=unblock_list)
+    else:
+        proxy = HTTP_Proxy(host, port)
+        proxy.start()
 
 if __name__ == '__main__':
     try:
