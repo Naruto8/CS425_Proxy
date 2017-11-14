@@ -7,6 +7,9 @@ import argparse
 BACKLOG = 50
 MAX_DATA = 8192
 DEBUG = True
+CWD = os.path.dirname(os.path.abspath(__file__))
+CACHE_DIR = CWD +"/cache/"
+LOG_FILE = CWD +"/log.txt"
 
 class HTTP_Proxy:
     def __init__(self, host, port):
@@ -35,7 +38,6 @@ class HTTP_Proxy:
     def proxy_thread(self, conn, client_addr):
         request = conn.recv(MAX_DATA)
         srequest = request.decode('utf-8')
-        self.check_version(srequest, conn)
         first_line = srequest.split(' ')[0]
         url = srequest.split(' ')[1]
 
@@ -44,7 +46,8 @@ class HTTP_Proxy:
             print("URL: " + url)
         
 
-        self.check_allowed(url,conn)
+        self.check_version(srequest, conn)
+        # self.check_allowed(url,conn)
         self.check_method(first_line, conn)
 
         http_pos = url.find("://")
@@ -75,18 +78,24 @@ class HTTP_Proxy:
             s.connect((webserver, port))
             s.send(request)
             print("Client's Request sent")
+            handled = self.check_cache(webserver, s, conn)
 
-            while 1:
-                data = s.recv(MAX_DATA)
+            if not handled:
+                while 1:
+                    data = s.recv(MAX_DATA)
 
-                if (len(data) > 0):
-                    conn.send(data)
-                else:
-                    break
+                    cache_file = open(CACHE_DIR + webserver, 'wb')
+                    cache_file.write(data)
 
-            print("Client's Request processed")
+                    if (len(data) > 0):
+                        conn.send(data)
+                    else:
+                        break
+                    cache_file.close()
+            
             s.close()
             conn.close()
+            print("Client's Request processed")
         except (socket.error, value, message):
             self.close(s=s, conn=conn)
             print("Runtime Error: " + message)
@@ -94,7 +103,6 @@ class HTTP_Proxy:
 
     def check_version(self, request, conn):
         version = request.split(' ')[2].split('/')[1].split('\n')[0].strip()
-        #print(request)
         if version == '1.1' or version == '1.0':
             pass
         else:
@@ -117,14 +125,11 @@ class HTTP_Proxy:
     def check_allowed(self,url,conn):
     	fo = open("blocked.txt","r")
     	test=url.split("/")[2].split(".")
-    	#print(test)
     	while True:
     		line = fo.readline()
     		if line:    			
     			linetest=line.split(".")[1].strip()
-    			#print(linetest)
     		for part in test:
-    			#print(part)
     			part1=part.strip()
 	    		if linetest==part1:
 		            print("url is blocked\n")
@@ -135,7 +140,18 @@ class HTTP_Proxy:
     		if not line: 
         		break
 
-
+    def check_cache(self, filename, s, conn):
+        file_path = CACHE_DIR + filename
+        try:
+            f = open(file_path, 'rb')
+            print("Using Cached File ......")
+            data = f.read()
+            found = True
+            conn.send(data)
+            f.close()
+        except IOError:
+            found = False
+        return found
 
     def filter(self):
         return
