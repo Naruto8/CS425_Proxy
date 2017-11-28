@@ -3,19 +3,28 @@ import sys
 import _thread as thread
 import socket
 import argparse
+import signal
 
 BACKLOG = 50
 MAX_DATA = 8192
-DEBUG = False
+DEBUG = True
 CWD = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = CWD +"/cache/"
 LOG_FILE = CWD +"/log.txt"
 BLOCKED_LIST = CWD + "/blocked.txt"
+session_requests = 0
+cache_requests = 0
+fresh_requests = 0
+total_requests = 0
 
 class HTTP_Proxy:
     def __init__(self, host=None, port=None):
         self.host = host
         self.port = port
+        self.number = 0
+        self.fresh_requests = 0
+        self.cache_requests = 0
+        self.update_stats()
 
     def start(self):
         try:
@@ -38,17 +47,17 @@ class HTTP_Proxy:
     def proxy_thread(self, conn, client_addr):
         request = conn.recv(MAX_DATA)
         srequest = request.decode('utf-8')
-        first_line = srequest.split(' ')[0]
+        http_method = srequest.split(' ')[0]
         url = srequest.split(' ')[1]
 
         if (DEBUG):
-            print(first_line)
+            print(http_method)
             print("URL: " + url)
         
 
         self.check_version(srequest, conn)
         # self.check_allowed(url,conn)
-        self.check_method(first_line, conn)
+        self.check_method(http_method, conn)
 
         http_pos = url.find("://")
         if (http_pos == -1):
@@ -78,7 +87,7 @@ class HTTP_Proxy:
             s.connect((webserver, port))
             s.send(request)
             print("Client's Request sent")
-            handled = self.check_cache(webserver, s, conn)
+            handled = self.check_cache(webserver, s, conn, client_addr, http_method, url)
 
             if not handled:
                 while 1:
@@ -92,10 +101,13 @@ class HTTP_Proxy:
                     else:
                         break
                     cache_file.close()
+                self.fresh_requests += 1
             
-            s.close()
-            conn.close()
+            self.update_log(client_addr, http_method, url)
+            self.number += 1
+            self.close(s=s, conn=conn)
             print("Client's Request processed")
+            print("Request Number: " + str(self.number))
         except (socket.error, value, message):
             self.close(s=s, conn=conn)
             print("Runtime Error: " + message)
@@ -122,7 +134,7 @@ class HTTP_Proxy:
             self.close(conn=conn)
             sys.exit(1)
 
-    def check_allowed(self,url,conn):
+    def check_allowed(self, url, conn):
     	fo = open(BLOCKED_LIST, 'r')
     	test=url.split("/")[2].split(".")
     	while True:
@@ -140,12 +152,14 @@ class HTTP_Proxy:
     		if not line: 
         		break
 
-    def check_cache(self, filename, s, conn):
+    def check_cache(self, filename, s, conn, client_addr, method, url):
         file_path = CACHE_DIR + filename
         try:
             f = open(file_path, 'rb')
             print("Using Cached File ......")
             data = f.read()
+            self.update_log(client_addr, method, url)
+            self.cache_requests += 1
             found = True
             conn.send(data)
             f.close()
@@ -175,7 +189,28 @@ class HTTP_Proxy:
                     f.write(line.strip() + '\n')
             f.close()
 
+    def update_log(self, client_addr, method, url):
+        log_file = open(LOG_FILE, 'a')
+        log_file.write(client_addr[0] + ': ' + method + ' ' + url + '\n')
+        log_file.close()
+
+    def update_stats(self):
+        global session_requests
+        global cache_requests
+        global fresh_requests
+        global total_requests
+        print("Updating stats....")
+        session_requests = self.number
+        cache_requests = self.cache_requests
+        fresh_requests = self.fresh_requests
+        with open(LOG_FILE) as log_file:
+            for i, l in enumerate(log_file):
+                pass
+        total_requests = i + 1
+        print('Total Requests: ' + str(total_requests))
+
     def close(self, s=None, conn=None):
+        self.update_stats()
         self.close_server(s)
         self.close_client(conn)
 
@@ -216,9 +251,32 @@ def main():
         proxy = HTTP_Proxy(host, port)
         proxy.start()
 
+def exit(signal, frame):
+    print('Received: SIGUSR2 (' + str(signal) + ')')
+    print('Exiting')
+    sys.exit()
+
+def stats(signal, frame):
+    print('Received: SIGUSR1 (' + str(signal) + ')')
+    print('Printing stats....')
+    print('Total requests processed by the Proxy:\t\t' + str(total_requests))
+    print('Requests processed in the current session:\t' + str(session_requests))
+    print('Requests processed via Cache:\t\t\t' + str(cache_requests))
+    print('Fresh requests processed:\t\t\t' + str(fresh_requests))
+
+def do_nothing(signal, frame):
+    print()
+    print('Received: SIGINT (' + str(signal) + '), ignoring.....')
+
+signal.signal(signal.SIGUSR2, exit)
+signal.signal(signal.SIGUSR1, stats)
+# signal.signal(signal.SIGINT, do_nothing)
+
 if __name__ == '__main__':
+    print(os.getpid())
     try:
         main()
     except KeyboardInterrupt:
+        # print("Detected SIGINT signal....")
         print("\n[KeyboardInterrupt]: Exiting!")
         sys.exit()
