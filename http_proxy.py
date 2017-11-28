@@ -270,13 +270,8 @@ def do_nothing(signal, frame):
 
 signal.signal(signal.SIGUSR2, exit)
 signal.signal(signal.SIGUSR1, stats)
-# signal.signal(signal.SIGINT, do_nothing)
+signal.signal(signal.SIGINT, do_nothing)
 
 if __name__ == '__main__':
     print(os.getpid())
-    try:
-        main()
-    except KeyboardInterrupt:
-        # print("Detected SIGINT signal....")
-        print("\n[KeyboardInterrupt]: Exiting!")
-        sys.exit()
+    main()
